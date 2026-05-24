@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const { MongoClient, ObjectId } = require("mongodb");
+const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
 
 const PORT = process.env.PORT || 8080;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -145,6 +145,18 @@ app.patch("/api/posts/:id/repost", async (req, res) => {
   }
 });
 
+function createMongoClient(uri) {
+  return new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+    autoSelectFamily: false,
+    serverSelectionTimeoutMS: 15000,
+  });
+}
+
 async function start() {
   if (!MONGODB_URI || MONGODB_URI.includes("YOUR_PASSWORD")) {
     console.error("\n❌ .env 파일에 MONGODB_URI를 설정해 주세요.");
@@ -160,20 +172,29 @@ async function start() {
     process.exit(1);
   }
 
-  client = new MongoClient(MONGODB_URI);
+  client = createMongoClient(MONGODB_URI);
   await client.connect();
   db = client.db(DB_NAME);
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n🚀 Feed 서버 실행 중`);
-    console.log(`   PC:       http://localhost:${PORT}`);
-    console.log(`   스마트폰: http://[PC IP]:${PORT}`);
+    console.log(`\n🚀 Feed 서버 실행 중 (port ${PORT})`);
+    if (process.env.RENDER_EXTERNAL_URL) {
+      console.log(`   접속: ${process.env.RENDER_EXTERNAL_URL}`);
+    } else {
+      console.log(`   PC:       http://localhost:${PORT}`);
+      console.log(`   스마트폰: http://[PC IP]:${PORT}`);
+    }
     console.log(`   DB:       ${DB_NAME}\n`);
   });
 }
 
 start().catch((err) => {
   console.error("\n❌ 서버 시작 실패:", err.message);
+  if (/SSL|tlsv1|alert internal error/i.test(err.message)) {
+    console.error("\n💡 이 SSL 오류는 보통 Atlas IP 허용 문제입니다.");
+    console.error("   Atlas → Network Access → Add IP → Allow Access from Anywhere (0.0.0.0/0)");
+    console.error("   저장 후 Render에서 Manual Deploy 로 재배포하세요.\n");
+  }
   process.exit(1);
 });
 
