@@ -39,6 +39,8 @@ function toPost(doc) {
     replies: doc.replies ?? 0,
     reposts: doc.reposts ?? 0,
     hasImage: !!doc.hasImage,
+    imageUrl: doc.imageUrl || "",
+    articleUrl: doc.articleUrl || "",
     liked: !!doc.liked,
     reposted: !!doc.reposted,
     time: formatRelativeTime(doc.createdAt),
