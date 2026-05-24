@@ -2,6 +2,7 @@ require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") }
 
 const Parser = require("rss-parser");
 const { MongoClient } = require("mongodb");
+const { RETENTION_DAYS, ensurePostRetentionIndex, purgeOldPosts } = require("./lib/post-retention");
 
 const MAX_POSTS = 10;
 
@@ -224,11 +225,27 @@ async function fetchNews() {
 
     await client.connect();
     const posts = client.db(dbName).collection("posts");
-    await posts.deleteMany({});
-    const result = await posts.insertMany(docs);
+
+    await ensurePostRetentionIndex(posts);
+    const removed = await purgeOldPosts(posts);
+    if (removed > 0) {
+      console.log(`🗑 ${RETENTION_DAYS}일 지난 게시글 ${removed}개 삭제`);
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+    for (const doc of docs) {
+      const result = await posts.updateOne(
+        { articleUrl: doc.articleUrl },
+        { $setOnInsert: doc },
+        { upsert: true }
+      );
+      if (result.upsertedCount) inserted += 1;
+      else skipped += 1;
+    }
 
     console.log(`✅ MongoDB 갱신 완료 (${dbName}.posts)`);
-    console.log(`   RSS 기사 ${result.insertedCount}개 반영\n`);
+    console.log(`   RSS 신규 ${inserted}개, 중복 ${skipped}개\n`);
     docs.forEach((d, i) => console.log(`   ${i + 1}. ${d.name} — ${d.text.split("\n")[0]}`));
     console.log("");
   } catch (err) {

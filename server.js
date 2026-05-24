@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
+const { RETENTION_DAYS, ensurePostRetentionIndex, purgeOldPosts } = require("./scripts/lib/post-retention");
 
 const PORT = process.env.PORT || 8080;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -177,6 +178,13 @@ async function start() {
   client = createMongoClient(MONGODB_URI);
   await client.connect();
   db = client.db(DB_NAME);
+
+  const posts = db.collection("posts");
+  await ensurePostRetentionIndex(posts);
+  const removed = await purgeOldPosts(posts);
+  if (removed > 0) {
+    console.log(`🗑 ${RETENTION_DAYS}일 지난 게시글 ${removed}개 삭제`);
+  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`\n🚀 Feed 서버 실행 중 (port ${PORT})`);
